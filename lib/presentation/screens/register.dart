@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../data/source/local/my_pref.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../bloc/auth/auth_bloc.dart';
 import '../widgets/widgets.dart';
 import 'home.dart';
 import 'login.dart';
@@ -17,7 +18,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmCtrl = TextEditingController();
   bool _obscurePass = true;
   bool _obscureConfirm = true;
-  String? _error;
 
   @override
   void dispose() {
@@ -33,35 +33,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final confirm = _confirmCtrl.text;
 
     if (username.isEmpty || password.isEmpty || confirm.isEmpty) {
-      setState(() => _error = 'toliq malumot kiriting');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Toliq malumot kiriting')),
+      );
       return;
     }
     if (password != confirm) {
-      setState(() => _error = 'ikki xil parol yozib quydiz)');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ikki xil parol yozib quydiz)')),
+      );
       return;
     }
     if (password.length < 4) {
-      setState(() => _error = "kamida 4 ta bo'lsinda parol");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("kamida 4 ta bo'lsinda parol")),
+      );
       return;
     }
 
-    final success = await MyPref.register(username, password);
-    if (!mounted) return;
-
-    if (success) {
-      await MyPref.setLoggedIn(username);
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-            (route) => false,
-      );
-    } else {
-      setState(() => _error = 'login band ekan)');
-    }
+    context.read<AuthBloc>().add(Register(username: username,password: password));
   }
 
   @override
   Widget build(BuildContext context) {
+    return BlocConsumer<AuthBloc, AuthState>(
+  listener: (context, state) {
+    if (state.isSuccess) {
+      Navigator.pushAndRemoveUntil(context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+      );
+    }
+    if (state.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.error!)),
+      );
+    }
+  },
+  builder: (context, state) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -89,12 +98,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 showToggle: true,
                 onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
               ),
-              if (_error != null) ...[
+              if (state.error != null) ...[
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: Color(0xFFE85D5D), fontSize: 13)),
+                Text(state.error!, style: const TextStyle(color: Color(0xFFE85D5D), fontSize: 13)),
               ],
               const SizedBox(height: 20),
-              AppButton(label: 'Register', onPressed: _register),
+              AppButton(label: 'Register', loading: state.isLoading, onPressed: _register),
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () => Navigator.pushReplacement(
@@ -108,10 +117,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     children: [
                       TextSpan(
                         text: 'Log in',
-                        style: TextStyle(
-                          color: Color(0xFFE85D5D),
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: Color(0xFFE85D5D), fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -123,5 +129,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ),
     );
+  },
+);
   }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../data/source/local/my_pref.dart';
+import '../../bloc/auth/auth_bloc.dart';
 import '../widgets/widgets.dart';
 import 'home.dart';
 import 'register.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,7 +16,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscurePass = true;
-  String? _error;
 
   @override
   void dispose() {
@@ -24,30 +24,49 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _login() async {
+  void _login() {
     final username = _userCtrl.text.trim();
     final password = _passCtrl.text;
 
-    if (username.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please fill in all fields');
+    if (username.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('username kiriting'),duration: Durations.short4,));
+      return;
+    }
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('parol kiriting'),duration: Durations.short4,));
+      return;
+    }
+    if (password.length<4) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('parol 4 ta dan kop bolishi kerak ediku !!!'),duration: Durations.short4,));
       return;
     }
 
-    if (MyPref.login(username, password)) {
-      await MyPref.setLoggedIn(username);
-      if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-            (route) => false,
-      );
-    } else {
-      setState(() => _error = 'Invalid username or password');
-    }
+    context.read<AuthBloc>().add(Login(username: username,password:password));
   }
 
   @override
   Widget build(BuildContext context) {
+    return BlocConsumer<AuthBloc, AuthState>(
+  listener: (context, state) {
+    if (state.isSuccess) {
+      Navigator.pushAndRemoveUntil(context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+      );
+    }
+    if (state.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.error!)),
+      );
+    }
+  },
+  builder: (context, state) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -67,12 +86,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 showToggle: true,
                 onToggle: () => setState(() => _obscurePass = !_obscurePass),
               ),
-              if (_error != null) ...[
+              if (state.error != null) ...[
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: Color(0xFFE85D5D), fontSize: 13)),
+                Text(state.error!, style: const TextStyle(color: Color(0xFFE85D5D), fontSize: 13)),
               ],
               const SizedBox(height: 20),
-              AppButton(label: 'Log In', onPressed: _login),
+              AppButton(label: 'Log In', loading: state.isLoading, onPressed: _login),
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () => Navigator.push(
@@ -86,10 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       TextSpan(
                         text: 'Sign up here',
-                        style: TextStyle(
-                          color: Color(0xFFE85D5D),
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: Color(0xFFE85D5D), fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -101,5 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  },
+);
   }
 }
