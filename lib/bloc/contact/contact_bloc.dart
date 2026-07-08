@@ -80,15 +80,21 @@ class ContactBloc extends Bloc<ContactEvent, ContactState> {
       try {
         final String? user = _appRepository.getLoggedInUser();
         if(user == null){
-          emit(state.copyWith(isLoading: false,error: "User topilmai"));
+          emit(state.copyWith(isLoading: false, error: "User topilmadi"));
           return;
         }
+
         await _appRepository.deleteContact(user, event.docId);
-        emit(state.copyWith(isLoading: false, isOperationSuccess: true));
+
+        final List<Contact> updatedList = await _appRepository.getContactsAsync(user);
+
+        emit(state.copyWith(
+            isLoading: false,
+            isOperationSuccess: true,
+            list: updatedList
+        ));
       } catch (e) {
-        emit(
-          state.copyWith(isLoading: false, error: "Kontakt o'chirib bo'lmadi"),
-        );
+        emit(state.copyWith(isLoading: false, error: "Kontakt o'chirib bo'lmadi"));
       }
     });
   }

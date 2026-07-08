@@ -292,11 +292,13 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         BlocListener<ContactBloc, ContactState>(
+          listenWhen: (previous, current) {
+            return (previous.error != current.error && current.error != null) ||
+                (previous.isOperationSuccess != current.isOperationSuccess && current.isOperationSuccess == true);
+          },
           listener: (context, state) {
             if (state.error != null) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Xatolik')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.error!)));
             }
           },
         ),

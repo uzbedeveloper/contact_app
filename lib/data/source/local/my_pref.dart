@@ -1,118 +1,107 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_ce_flutter/hive_ce_flutter.dart';
+import '../hive/adapters/hive_registrar.g.dart';
+import 'model/ContactHive.dart';
+import 'model/UserHive.dart';
 import 'model/contact.dart';
 
+
 class MyPref {
-  static final _db = FirebaseFirestore.instance;
-  static late final SharedPreferences _prefs;
+  static late final Box _settingsBox;
+  static late final Box<UserHive> _usersBox;
+
+  static String _contactsBoxName(String username) {
+    final safe = username.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    return 'contacts_$safe';
+  }
+
+  static Future<Box<ContactHive>> _openContactsBox(String username) {
+    return Hive.openBox<ContactHive>(_contactsBoxName(username));
+  }
 
   static Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    await Hive.initFlutter();
+    Hive.registerAdapters();
+    _usersBox = await Hive.openBox<UserHive>('users');
+    _settingsBox = await Hive.openBox('settings');
   }
 
-  static Future<void> setLoggedIn(String username) async {
-    await _prefs.setString('logged_in_user', username);
-  }
+  static Future<void> setLoggedIn(String username) async =>
+      await _settingsBox.put('logged_in_user', username);
 
-  static String? getLoggedInUser() => _prefs.getString('logged_in_user');
+  static String? getLoggedInUser() => _settingsBox.get('logged_in_user') as String?;
 
   static bool isLoggedIn() => getLoggedInUser() != null;
 
-  static Future<void> logout() async {
-    await _prefs.remove('logged_in_user');
-  }
-
+  static Future<void> logout() async => await _settingsBox.delete('logged_in_user');
 
   static Future<bool> register(String username, String password) async {
-    final doc = await _db.collection('users').doc(username).get();
-    if (doc.exists) return false;
-    await _db.collection('users').doc(username).set({'password': password});
+    if (_usersBox.containsKey(username)) return false;
+    await _usersBox.put(
+      username,
+      UserHive(username: username, password: password),
+    );
     return true;
   }
 
   static Future<bool> loginAsync(String username, String password) async {
-    final doc = await _db.collection('users').doc(username).get();
-    if (!doc.exists) return false;
-    return doc.data()?['password'] == password;
+    final user = _usersBox.get(username);
+    return user != null && user.password == password;
   }
 
   static Future<void> unregister(String username) async {
-    final contacts = await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .get();
-    for (final doc in contacts.docs) {
-      await doc.reference.delete();
-    }
-    await _db.collection('users').doc(username).delete();
+    await _usersBox.delete(username);
+    await Hive.deleteBoxFromDisk(_contactsBoxName(username));
     if (getLoggedInUser() == username) await logout();
   }
 
-
   static Future<List<Contact>> getContactsAsync(String username) async {
-    final snapshot = await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .orderBy('createdAt')
-        .get();
-    return snapshot.docs
-        .map((d) => Contact.fromMap({...d.data(), 'id': d.id}))
+    final box = await _openContactsBox(username);
+    final entries = box.toMap().entries.toList()
+      ..sort((a, b) => a.value.createdAt.compareTo(b.value.createdAt));
+    return entries
+        .map((e) => Contact(
+      id: e.key.toString(),
+      name: e.value.name,
+      phone: e.value.phone,
+    ))
         .toList();
   }
 
   static Future<bool> addContact(
       String username, String name, String phone) async {
-    final phoneCheck = await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .where('phone', isEqualTo: phone)
-        .get();
-    if (phoneCheck.docs.isNotEmpty) return false;
+    final box = await _openContactsBox(username);
+    final nameLower = name.toLowerCase();
+    final exists = box.values.any(
+          (c) => c.phone == phone || c.name.toLowerCase() == nameLower,
+    );
+    if (exists) return false;
 
-    final nameCheck = await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .where('nameLower', isEqualTo: name.toLowerCase())
-        .get();
-    if (nameCheck.docs.isNotEmpty) return false;
-
-    await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .add({
-      'name': name,
-      'nameLower': name.toLowerCase(),
-      'phone': phone,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await box.add(ContactHive(
+      name: name,
+      phone: phone,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    ));
     return true;
   }
 
   static Future<void> updateContact(
       String username, String docId, String name, String phone) async {
-    await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .doc(docId)
-        .update({
-      'name': name,
-      'nameLower': name.toLowerCase(),
-      'phone': phone,
-    });
+    final box = await _openContactsBox(username);
+    final key = int.parse(docId);
+    await box.put(
+      key,
+      ContactHive(
+        id: key,
+        name: name,
+        phone: phone,
+        createdAt: box.get(key)?.createdAt ??
+            DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   static Future<void> deleteContact(String username, String docId) async {
-    await _db
-        .collection('users')
-        .doc(username)
-        .collection('contacts')
-        .doc(docId)
-        .delete();
+    final box = await _openContactsBox(username);
+    await box.delete(int.parse(docId));
   }
 }

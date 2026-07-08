@@ -5,6 +5,18 @@ class Contact {
 
   Contact({this.id, required this.name, required this.phone});
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'phone': phone,
+  };
+
+  factory Contact.fromJson(Map<String, dynamic> json) => Contact(
+    id: json['id']?.toString(),
+    name: json['name'] as String,
+    phone: json['phone'] as String,
+  );
+
   Contact copyWith({String? id, String? name, String? phone}) {
     return Contact(
       id: id ?? this.id,
@@ -12,12 +24,4 @@ class Contact {
       phone: phone ?? this.phone,
     );
   }
-
-  Map<String, dynamic> toMap() => {'id': id, 'name': name, 'phone': phone};
-
-  factory Contact.fromMap(Map<String, dynamic> map) => Contact(
-    id: map['id'] as String?,
-    name: map['name'] as String,
-    phone: map['phone'] as String,
-  );
 }
